@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use dotenv::dotenv;
 use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status};
 
@@ -6,6 +8,14 @@ use judgement::{JudgeRequest, JudgeResponse};
 
 pub mod judgement {
     tonic::include_proto!("judgement");
+}
+
+fn run_judge_script(status: u8) -> bool {
+    let status = Command::new("sh")
+        .args(["-c", &format!("exit {}", status)])
+        .status()
+        .unwrap();
+    return status.success();
 }
 
 #[derive(Debug, Default)]
@@ -20,11 +30,11 @@ impl Judger for MyJudger {
         let team = &request.get_ref().team;
         // let problem: &u8 = &request.get_ref().problem_id.parse().unwrap();
         let problem = &request.get_ref().problem_name;
-
         dbg!(team, problem);
 
+        let judge_status = run_judge_script(0);
         let response = judgement::JudgeResponse {
-            is_correct: "true".to_string(),
+            is_correct: judge_status.to_string(),
         };
 
         Ok(Response::new(response))
