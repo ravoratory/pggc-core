@@ -1,0 +1,17 @@
+syntax = "proto3";
+package judgement;
+
+service Judger {
+  rpc Judge (JudgeRequest) returns (JudgeResponse);
+}
+
+message JudgeRequest {
+  string team = 1;
+  string problem_id = 2;
+  string problem_name = 3;
+}
+
+message JudgeResponse {
+  string is_correct = 1;
+  // TODO: status code, etc
+}

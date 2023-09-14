@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[[bin]] # Bin to run the HelloWorld gRPC server
+[[bin]] # Bin to run the judgement gRPC server
 name = "server"
 path = "src/main.rs"
 
