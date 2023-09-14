@@ -11,18 +11,21 @@ pub mod judgement {
 }
 
 fn run_judge_script(team: &str, problem: &str) -> (bool, String) {
-    // FIXME: ssh にしたいね
+    let host = std::env::var("GIT_HOST")
+        .unwrap_or("github.com".to_string());
+    let org = std::env::var("GIT_ORG")
+        .unwrap_or("".to_string());
     let _ = Command::new("git")
         .args([
             "clone",
             "-q",
-            &format!("https://github.com/pggc2-problems/{}.git", problem),
+            &format!("{team}@{host}:{org}{problem}.git"),
         ])
         .status();
 
     let judge_result = Command::new("pytest")
         .args(["-q", "--tb=line", "-rN"])
-        .arg(format!("test-script/{}.py", problem))
+        .arg(format!("test-script/{problem}.py"))
         .output()
         .unwrap();
     // HACK: 整形したかったら pytest-json-report 使うのが良さそう
@@ -62,7 +65,7 @@ impl Judger for MyJudger {
 fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
     let token_string =
         std::env::var("VERIFY_TOKEN").expect("You should set variables 'VERIFY_TOKEN'");
-    let token: MetadataValue<_> = format!("Bearer {token_string}", token_string = token_string)
+    let token: MetadataValue<_> = format!("Bearer {token_string}")
         .parse()
         .unwrap();
 
