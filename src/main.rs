@@ -10,12 +10,28 @@ pub mod judgement {
     tonic::include_proto!("judgement");
 }
 
-fn run_judge_script(status: u8) -> bool {
-    let status = Command::new("sh")
-        .args(["-c", &format!("exit {}", status)])
-        .status()
+fn run_judge_script(team: &str, problem: &str) -> (bool, String) {
+    // FIXME: ssh にしたいね
+    let _ = Command::new("git")
+        .args([
+            "clone",
+            "-q",
+            &format!("https://github.com/pggc2-problems/{}.git", problem),
+        ])
+        .status();
+
+    let judge_result = Command::new("pytest")
+        .args(["-q", "--tb=line", "-rN"])
+        .arg(format!("test-script/{}.py", problem))
+        .output()
         .unwrap();
-    return status.success();
+    // HACK: 整形したかったら pytest-json-report 使うのが良さそう
+    let log = String::from_utf8_lossy(&judge_result.stdout).to_string();
+
+    // HACK: clone を何回も実行しないように、開発時は コメントアウト
+    let _ = Command::new("rm").args(["-rf", problem]).status();
+
+    return (judge_result.status.success(), log);
 }
 
 #[derive(Debug, Default)]
@@ -32,9 +48,11 @@ impl Judger for MyJudger {
         let problem = &request.get_ref().problem_name;
         dbg!(team, problem);
 
-        let judge_status = run_judge_script(0);
+        let (judge_status, judge_log) = run_judge_script(team, problem);
+        dbg!(&judge_status);
         let response = judgement::JudgeResponse {
             is_correct: judge_status.to_string(),
+            log: judge_log,
         };
 
         Ok(Response::new(response))
