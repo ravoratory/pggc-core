@@ -1,27 +1,25 @@
-use std::process::Command;
-
 use dotenv::dotenv;
-use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status};
-
 use judgement::judger_server::{Judger, JudgerServer};
 use judgement::{JudgeRequest, JudgeResponse};
+use std::process::Command;
+use tonic::Code;
+use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status};
 
 pub mod judgement {
     tonic::include_proto!("judgement");
 }
 
-fn run_judge_script(team: &str, problem: &str) -> (bool, String) {
-    let host = std::env::var("GIT_HOST")
-        .unwrap_or("github.com".to_string());
-    let org = std::env::var("GIT_ORG")
-        .unwrap_or("".to_string());
-    let _ = Command::new("git")
-        .args([
-            "clone",
-            "-q",
-            &format!("{team}@{host}:{org}{problem}.git"),
-        ])
-        .status();
+fn run_judge_script(team: &str, problem: &str) -> Result<(bool, String), Status> {
+    let host = std::env::var("GIT_HOST").unwrap_or("github.com".to_string());
+    let org = std::env::var("GIT_ORG").unwrap_or("".to_string());
+    let clone_result = Command::new("git")
+        .args(["clone", "-q", &format!("{team}@{host}:{org}/{problem}.git")])
+        .output()
+        .unwrap();
+    if !clone_result.status.success() {
+        let msg = String::from_utf8_lossy(&clone_result.stderr).to_string();
+        return Err(Status::new(Code::Internal, format!("fail to clone: {msg}")));
+    }
 
     let judge_result = Command::new("pytest")
         .args(["-q", "--tb=line", "-rN"])
@@ -31,10 +29,9 @@ fn run_judge_script(team: &str, problem: &str) -> (bool, String) {
     // HACK: 整形したかったら pytest-json-report 使うのが良さそう
     let log = String::from_utf8_lossy(&judge_result.stdout).to_string();
 
-    // HACK: clone を何回も実行しないように、開発時は コメントアウト
     let _ = Command::new("rm").args(["-rf", problem]).status();
 
-    return (judge_result.status.success(), log);
+    return Ok((judge_result.status.success(), log));
 }
 
 #[derive(Debug, Default)]
@@ -51,7 +48,13 @@ impl Judger for MyJudger {
         let problem = &request.get_ref().problem_name;
         dbg!(team, problem);
 
-        let (judge_status, judge_log) = run_judge_script(team, problem);
+        let (judge_status, judge_log) = match run_judge_script(team, problem) {
+            Ok(out) => out,
+            Err(status) => {
+                return Err(status);
+            }
+        };
+
         dbg!(&judge_status);
         let response = judgement::JudgeResponse {
             is_correct: judge_status.to_string(),
@@ -65,9 +68,7 @@ impl Judger for MyJudger {
 fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
     let token_string =
         std::env::var("VERIFY_TOKEN").expect("You should set variables 'VERIFY_TOKEN'");
-    let token: MetadataValue<_> = format!("Bearer {token_string}")
-        .parse()
-        .unwrap();
+    let token: MetadataValue<_> = format!("Bearer {token_string}").parse().unwrap();
 
     match req.metadata().get("authorization") {
         Some(t) if token == t => Ok(req),

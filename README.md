@@ -9,7 +9,7 @@ GIT_ORG=github.com
 GIT_HOST=yourorg/
 ```
 ```
-cargo run --bin server
+cargo watch -x "run --bin server" -w src/main.rs
 ```
 
 ### client debugging
